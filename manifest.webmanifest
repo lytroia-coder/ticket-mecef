@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "Ticket MECeF 80 mm",
+  "short_name": "Ticket MECeF",
+  "description": "Transforme la facture normalisée e-MECeF (PDF A4) en ticket 80 mm. Fonctionne sans internet.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f5",
+  "theme_color": "#0b6b55",
+  "icons": [
+    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icones/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    { "action": "./", "accept": { "application/pdf": [".pdf"] } }
+  ]
+}
