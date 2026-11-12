@@ -401,14 +401,23 @@ const winAnsi = t => t.replace(/[‐-―−]/g, "-").replace(/[‘’]/g, "'").r
 
 async function genererTicket(f, { PDFDocument, StandardFonts, rgb }) {
   const pdf = await PDFDocument.create();
-  const N = await pdf.embedFont(StandardFonts.Courier), B = await pdf.embedFont(StandardFonts.CourierBold);
+  // Helvetica gras partout : le Courier a des traits trop fins pour une tête
+  // thermique à 203 dpi et sortait délavé (constaté sur imprimante réelle).
+  // Les titres se distinguent par la taille.
+  const B = await pdf.embedFont(StandardFonts.HelveticaBold), N = B;
   const qr = await pdf.embedPng(f.qrPng);
   pdf.setTitle(`${f.titre} ${f.numero}`);
   const utile = LARG - 2 * MARGE;
 
   const couper = (t, font, size, max) => {
     const res = []; let cur = "";
-    for (const m of t.split(" ")) {
+    const morceaux = t.split(" ").flatMap(m => {
+      if (font.widthOfTextAtSize(m, size) <= max) return [m];
+      const parts = []; let p = "";
+      for (const c of m) { if (p && font.widthOfTextAtSize(p + c, size) > max) { parts.push(p); p = c; } else p += c; }
+      return [...parts, p];
+    });
+    for (const m of morceaux) {
       const essai = cur ? cur + " " + m : m;
       if (!cur || font.widthOfTextAtSize(essai, size) <= max) cur = essai; else { res.push(cur); cur = m; }
     }
@@ -419,69 +428,69 @@ async function genererTicket(f, { PDFDocument, StandardFonts, rgb }) {
   const dessiner = (page, hauteur) => {
     let y = hauteur - 6 * MM;
     const txt = (t, x, size, font) => page && page.drawText(winAnsi(t), { x, y, size, font, color: rgb(0, 0, 0) });
-    const ligne = (t, size = 8, gras = false, centre = false) => {
+    const ligne = (t, size = 10.5, gras = false, centre = false) => {
       const font = gras ? B : N;
       for (const m of (t ? couper(winAnsi(t), font, size, utile) : [""])) {
         const w = font.widthOfTextAtSize(m, size);
-        txt(m, centre ? (LARG - w) / 2 : MARGE, size, font); y -= size * 1.35;
+        txt(m, centre ? (LARG - w) / 2 : MARGE, size, font); y -= size * 1.28;
       }
     };
-    const gd = (g, d, size = 8, gras = false) => {
+    const gd = (g, d, size = 10.5, gras = false) => {
       const font = gras ? B : N; d = winAnsi(d);
       const wd = font.widthOfTextAtSize(d, size);
       txt(d, LARG - MARGE - wd, size, font);
-      couper(winAnsi(g), font, size, utile - wd - 2 * MM).forEach((m, i) => { if (i) y -= size * 1.35; txt(m, MARGE, size, font); });
-      y -= size * 1.35;
+      couper(winAnsi(g), font, size, utile - wd - 2 * MM).forEach((m, i) => { if (i) y -= size * 1.28; txt(m, MARGE, size, font); });
+      y -= size * 1.28;
     };
     const trait = (pointille = false) => {
-      page && page.drawLine({ start: { x: MARGE, y: y + 2 }, end: { x: LARG - MARGE, y: y + 2 }, thickness: .6, color: rgb(0, 0, 0), dashArray: pointille ? [1, 2] : undefined });
-      y -= 2.5 * MM;
+      page && page.drawLine({ start: { x: MARGE, y: y + 2 }, end: { x: LARG - MARGE, y: y + 2 }, thickness: 1, color: rgb(0, 0, 0), dashArray: pointille ? [1, 2] : undefined });
+      y -= 4 * MM;
     };
 
-    ligne(f.entreprise, 11, true, true);
-    ligne(`IFU: ${f.ifu}`, 7.5, false, true);
-    if (f.rccm) ligne(`RCCM: ${f.rccm}`, 7.5, false, true);
-    f.adresse.forEach(a => ligne(a, 7.5, false, true));
-    [f.telephone, f.email].filter(Boolean).forEach(a => ligne(a, 7.5, false, true));
+    ligne(f.entreprise, 14, true, true);
+    ligne(`IFU: ${f.ifu}`, 10, false, true);
+    if (f.rccm) ligne(`RCCM: ${f.rccm}`, 10, false, true);
+    f.adresse.forEach(a => ligne(a, 10, false, true));
+    [f.telephone, f.email].filter(Boolean).forEach(a => ligne(a, 10, false, true));
     trait();
-    ligne(f.titre, 11, true, true);
-    ligne(`N° ${f.numero}`, 8, false, true);
-    if (f.date) ligne(`Date: ${f.date}`, 8, false, true);
-    if (f.refOrigine) { ligne("Réf. fact. orig.:", 7.5, false, true); ligne(f.refOrigine, 7.5, false, true); }
+    ligne(f.titre, 14, true, true);
+    ligne(`N° ${f.numero}`, 10.5, false, true);
+    if (f.date) ligne(`Date: ${f.date}`, 10.5, false, true);
+    if (f.refOrigine) { ligne("Réf. fact. orig.:", 10, false, true); ligne(f.refOrigine, 10, false, true); }
     trait();
     if (f.vendeur) gd("Vendeur:", f.vendeur);
-    if (f.client.nom) { ligne("Client:", 8); ligne(f.client.nom, 8, true); }
+    if (f.client.nom) { ligne("Client:", 10.5); ligne(f.client.nom, 10.5, true); }
     if (f.client.ifu) gd("IFU client:", f.client.ifu);
     if (f.client.adresse) gd("Adresse:", f.client.adresse);
     if (f.client.contact) gd("Contact:", f.client.contact);
     if (f.commentaire) gd("Réf.:", f.commentaire);
     trait();
-    for (const a of f.articles) { ligne(a.nom, 7.5); gd(`  ${a.qte} x ${a.pu}`, `${a.montant} [${a.groupe}]`, 7.5); y -= .8 * MM; }
+    for (const a of f.articles) { ligne(a.nom, 10); gd(`  ${a.qte} x ${a.pu}`, `${a.montant} [${a.groupe}]`, 10); y -= .8 * MM; }
     trait();
-    gd("TOTAL", f.total, 11, true); y -= MM;
+    gd("TOTAL", f.total, 14, true); y -= MM;
     for (const v of f.ventilation) {
-      if (v.impot === "-") gd(`${v.libelle} [${v.groupe}]`, v.total, 7.5);
+      if (v.impot === "-") gd(`${v.libelle} [${v.groupe}]`, v.total, 10);
       else {
         const taux = (v.libelle.match(/\(\s*([\d.,]+)\s*\)\s*%|([\d.,]+)\s*%/) || []).slice(1).find(Boolean);
-        gd(`Imposable [${v.groupe}]`, v.imposable, 7.5);
-        gd(`Impôt [${v.groupe}]${taux ? " " + taux + "%" : ""}`, v.impot, 7.5);
+        gd(`Imposable [${v.groupe}]`, v.imposable, 10);
+        gd(`Impôt [${v.groupe}]${taux ? " " + taux + "%" : ""}`, v.impot, 10);
       }
     }
     trait(true);
     f.paiements.forEach(([mode, mt]) => gd(`${mode}:`, mt));
     gd("NBR d'articles:", String(f.articles.length));
-    if (f.enLettres) { y -= MM; ligne(f.enLettres, 6.5); }
+    if (f.enLettres) { y -= MM; ligne(f.enLettres, 9); }
     trait(true);
-    ligne("CODE MECeF/DGI", 8, true, true);
-    ligne(f.mecef.code, 8, true, true);
-    gd("MECeF NIM:", f.mecef.nim, 7.5);
-    gd("MECeF Compteurs:", f.mecef.compteurs, 7.5);
-    gd("MECeF Heure:", f.mecef.heure, 7.5);
+    ligne("CODE MECeF/DGI", 10.5, true, true);
+    ligne(f.mecef.code, 10.5, true, true);
+    gd("MECeF NIM:", f.mecef.nim, 10);
+    gd("MECeF Compteurs:", f.mecef.compteurs, 10);
+    gd("MECeF Heure:", f.mecef.heure, 10);
     y -= 2 * MM;
     const t = 32 * MM;
     page && page.drawImage(qr, { x: (LARG - t) / 2, y: y - t, width: t, height: t });
     y -= t + 4 * MM;
-    ligne("MERCI ET A BIENTOT", 8, true, true);
+    ligne("MERCI ET A BIENTOT", 10.5, true, true);
     return y;
   };
 
