@@ -60,6 +60,22 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   width: max-content; max-width: calc(100% - 32px); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   background: var(--ink); color: var(--bg); border-radius: 12px; padding: 10px 12px 10px 16px; box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: .92rem; }
 .maj button { padding: 6px 14px; background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 600; }
+.envoi { display: inline-flex; gap: 6px; align-items: center; }
+.envoi::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.envoi.ok::before { background: var(--accent); }
+.envoi.attente::before { background: var(--warn); }
+.envoi button { padding: 0; border: 0; background: none; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; font-size: inherit; }
+dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(480px, calc(100% - 32px)); background: var(--surface); color: var(--ink); }
+dialog::backdrop { background: rgba(10, 20, 16, .45); }
+dialog form { display: grid; gap: 14px; padding: 20px; }
+dialog h2 { margin: 0; font-size: 1.2rem; }
+dialog p { margin: 0; color: var(--muted); font-size: .9rem; }
+dialog label { display: grid; gap: 4px; font-size: .9rem; font-weight: 600; }
+dialog label span { font-weight: 400; color: var(--muted); font-size: .82rem; }
+dialog input { font: inherit; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); min-width: 0; }
+dialog input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+dialog .pied { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; }
+dialog .pied output { margin-right: auto; font-size: .88rem; }
 .hors-ligne { display: inline-flex; gap: 6px; align-items: center; }
 .hero h1 { font-size: clamp(1.9rem, 4.6vw, 3rem); line-height: 1.12; letter-spacing: -0.025em; margin: 40px 0 14px; max-width: 18ch; text-wrap: balance; }
 .hero p.lead { font-size: clamp(1.02rem, 1.8vw, 1.18rem); color: var(--hero-muted); margin: 0; max-width: 54ch; }
@@ -163,6 +179,7 @@ footer p { margin: 0; max-width: 72ch; }
     </div>
     <div class="sous-depot">
       <label><input type="checkbox" id="auto"> Imprimer automatiquement</label>
+      <span class="envoi" id="envoi"><span id="envoi-txt">Bilan au gérant : non réglé</span> <button type="button" id="btn-reglages">Paramètres</button></span>
       <span class="local"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Votre facture reste sur votre appareil</span>
     </div>
     <div id="statut" class="status" role="status" hidden></div>
@@ -222,6 +239,23 @@ footer p { margin: 0; max-width: 72ch; }
     <p>Le ticket est une remise en page d'une facture déjà normalisée par la DGI. Un PDF qui n'est pas une facture normalisée e‑MECeF est refusé. Réglage conseillé à l'impression : imprimante ticket, marges « Aucune », échelle 100 %.</p>
   </div>
 </footer>
+
+<dialog id="reglages" aria-labelledby="t-reglages">
+  <form method="dialog" id="form-reglages">
+    <h2 id="t-reglages">Paramètres du poste</h2>
+    <p>À régler une seule fois à l'installation. Les tickets sont enregistrés et envoyés à la feuille Google du gérant, qui reçoit le bilan chaque jour.</p>
+    <label>Siège de ce poste <span>Ex. : Cotonou, Godomey, Abomey-Calavi</span><input id="r-siege" required autocomplete="off"></label>
+    <label>Nom du poste <span>Facultatif. Ex. : Caisse 1</span><input id="r-poste" autocomplete="off"></label>
+    <label>Adresse du script Google <span>Fournie à l'installation (commence par https://script.google.com/)</span><input id="r-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"></label>
+    <label>Clé des postes <span>Onglet « Paramètres » de la feuille Google</span><input id="r-cle" autocomplete="off" spellcheck="false"></label>
+    <div class="pied">
+      <output id="r-msg" role="status"></output>
+      <button type="button" id="r-tester">Tester</button>
+      <button type="button" id="r-annuler">Annuler</button>
+      <button class="primary" id="r-ok" value="ok">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
 
 <div class="maj" id="maj" role="status" hidden>Une nouvelle version est disponible. <button id="btn-maj">Mettre à jour</button></div>
 
@@ -513,6 +547,158 @@ async function genererTicket(f, { PDFDocument, StandardFonts, rgb }) {
 }
 
 // =====================================================================
+// REGISTRE : fiche enregistrée pour chaque ticket (bilan journalier)
+// =====================================================================
+// Fonctions pures, testées sous Node. Les montants sont recopiés tels quels
+// (texte de la facture) ; la valeur numérique ne sert qu'aux sommes du bilan.
+
+const TYPES = ["FV", "FA", "EV", "EA"];
+
+/** FV, FA (avoir), EV (export), EA (avoir export) — lu dans les compteurs « 56/2400 FA ». */
+function typeDe(f) {
+  const suffixe = (f.mecef?.compteurs || "").trim().split(/\s+/).pop();
+  if (TYPES.includes(suffixe)) return suffixe;
+  return /AVOIR/i.test(f.titre || "") ? "FA" : "FV";
+}
+
+const estAvoir = type => type === "FA" || type === "EA";
+
+/** Nombre de roues du camion, lu dans le nom des articles (« camion 10 roues »). */
+function rouesDe(articles) {
+  for (const a of articles || []) {
+    const r = /(\d+)\s*roues?\b/i.exec(a.nom || "");
+    if (r) return Number(r[1]);
+  }
+  return null;
+}
+
+/** « 49.000 » → 49000 ; « 1.234,5 » → 1234.5 (format des factures e-MECeF). */
+function nombre(texte) {
+  const n = Number(String(texte ?? "").replace(/\s/g, "").replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** « 06/11/2026 00:05:53 » → { date: "2026-11-06", heure: "00:05:53" } */
+function dateHeure(texte) {
+  const r = /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)/.exec(texte || "");
+  return r ? { date: `${r[3]}-${r[2]}-${r[1]}`, heure: r[4] } : { date: "", heure: "" };
+}
+
+/** Objet facture (lireFacture) + réglages du poste → fiche à enregistrer. */
+function ficheTicket(f, { siege = "", poste = "" } = {}) {
+  const type = typeDe(f);
+  const { date, heure } = dateHeure(f.mecef.heure);
+  return {
+    numero: f.numero,
+    type,
+    titre: f.titre,
+    date,
+    heure,
+    siege: siege.trim(),
+    poste: poste.trim(),
+    entreprise: f.entreprise,
+    client: f.client?.nom || "",
+    clientIfu: f.client?.ifu || "",
+    immatriculation: f.commentaire || "",
+    roues: rouesDe(f.articles),
+    total: f.total,
+    totalNombre: nombre(f.total),
+    paiements: (f.paiements || []).map(([mode, mt]) => `${mode} ${mt}`).join(", "),
+    codeMecef: f.mecef.code,
+    compteurs: f.mecef.compteurs,
+    articles: (f.articles || []).map(a => ({ nom: a.nom, qte: a.qte, pu: a.pu, montant: a.montant, groupe: a.groupe })),
+  };
+}
+
+// =====================================================================
+// ENVOI : registre local (IndexedDB) + envoi vers la feuille Google
+// =====================================================================
+// Chaque ticket est d'abord enregistré sur l'appareil, puis envoyé dès qu'il y
+// a internet. Sans connexion, il reste en attente et repart automatiquement.
+
+const BASE = "ticket-mecef", VERSION_BASE = 1, MAGASIN = "tickets";
+const CLE_CONFIG = "ticket-config";
+
+function lireConfig() {
+  try { return { siege: "", poste: "", url: "", cle: "", ...JSON.parse(localStorage.getItem(CLE_CONFIG) || "{}") }; }
+  catch { return { siege: "", poste: "", url: "", cle: "" }; }
+}
+function ecrireConfig(c) {
+  try { localStorage.setItem(CLE_CONFIG, JSON.stringify(c)); return true; } catch { return false; }
+}
+const envoiConfigure = c => Boolean(c.url && c.cle && c.siege);
+
+let base = null;
+function ouvrirBase() {
+  base ??= new Promise((ok, ko) => {
+    const r = indexedDB.open(BASE, VERSION_BASE);
+    r.onupgradeneeded = () => {
+      const s = r.result.createObjectStore(MAGASIN, { keyPath: "numero" });
+      s.createIndex("envoye", "envoye");
+      s.createIndex("date", "date");
+    };
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => ko(r.error);
+  });
+  return base;
+}
+const req = r => new Promise((ok, ko) => { r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); });
+async function magasin(mode) { return (await ouvrirBase()).transaction(MAGASIN, mode).objectStore(MAGASIN); }
+
+/** Enregistre la fiche. Un ticket déjà envoyé (même n° de facture) n'est pas renvoyé. */
+async function enregistrer(fiche) {
+  const s = await magasin("readwrite");
+  const ancien = await req(s.get(fiche.numero));
+  await req(s.put({ ...fiche, envoye: ancien?.envoye ?? 0, enregistreLe: ancien?.enregistreLe ?? new Date().toISOString() }));
+}
+
+async function enAttente() {
+  return req((await magasin("readonly")).index("envoye").getAll(0));
+}
+async function ticketsDuJour(date) {
+  return req((await magasin("readonly")).index("date").getAll(date));
+}
+
+let enCours = null;
+/** Envoie les tickets en attente. Renvoie { attente, erreur? }. */
+function synchroniser(config = lireConfig()) {
+  enCours ??= (async () => {
+    try {
+      const liste = await enAttente();
+      if (!liste.length || !envoiConfigure(config)) return { attente: liste.length };
+      if (navigator.onLine === false) return { attente: liste.length, erreur: "hors ligne" };
+      const recus = await poster(config, { action: "tickets", tickets: liste.map(({ envoye, ...t }) => t) });
+      const s = await magasin("readwrite");
+      for (const t of liste) if (recus.includes(t.numero)) await req(s.put({ ...t, envoye: 1 }));
+      return { attente: liste.length - recus.length };
+    } catch (e) {
+      return { attente: (await enAttente().catch(() => [])).length, erreur: e.message || String(e) };
+    } finally {
+      enCours = null;
+    }
+  })();
+  return enCours;
+}
+
+/** Vérifie l'adresse et la clé du script Google. */
+async function testerConnexion(config) {
+  await poster(config, { action: "ping" });
+}
+
+async function poster(config, corps) {
+  // text/plain : requête « simple », sans pré-vérification CORS (exigé par Apps Script)
+  const rep = await fetch(config.url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ cle: config.cle, siege: config.siege, poste: config.poste, ...corps }),
+  });
+  let json;
+  try { json = await rep.json(); } catch { throw new Error(`réponse inattendue du script (HTTP ${rep.status})`); }
+  if (!json.ok) throw new Error(json.erreur || "refusé par le script");
+  return json.recus || [];
+}
+
+// =====================================================================
 // INTERFACE (navigateur uniquement)
 // =====================================================================
 
@@ -595,6 +781,9 @@ async function traiter(fichier) {
     $("btn-print").disabled = $("btn-dl").disabled = false;
     statut("");
     if ($("auto").checked) imprimer();
+    // Registre : enregistré sur l'appareil puis envoyé à la feuille Google (sans bloquer le ticket)
+    try { await enregistrer(ficheTicket(f, lireConfig())); envoyer(); }
+    catch (e) { console.error(e); statut("Ticket prêt, mais il n'a pas pu être enregistré pour le bilan : " + (e.message || e), "warn"); }
   } catch (e) {
     console.error(e);
     statut(`${fichier.name} : ${e.message || e}`, "err");
@@ -615,6 +804,39 @@ $("btn-dl").onclick = telecharger;
 $("btn-autre").onclick = () => { $("depot").scrollIntoView({ behavior: "smooth" }); input.click(); };
 try { $("auto").checked = localStorage.getItem("ticket-auto") === "1"; } catch {}
 $("auto").onchange = () => { try { localStorage.setItem("ticket-auto", $("auto").checked ? "1" : "0"); } catch {} };
+// ---------- Bilan au gérant : état d'envoi et paramètres du poste
+async function envoyer() {
+  const c = lireConfig(), r = await synchroniser(c);
+  const el = $("envoi"), txt = $("envoi-txt");
+  if (!envoiConfigure(c)) { el.className = "envoi"; txt.textContent = r.attente ? `${r.attente} ticket(s) enregistré(s), envoi non réglé` : "Bilan au gérant : non réglé"; }
+  else if (r.attente) { el.className = "envoi attente"; txt.textContent = `${r.attente} ticket(s) en attente d'envoi${r.erreur === "hors ligne" ? " (hors ligne)" : ""}`; txt.title = r.erreur || ""; }
+  else { el.className = "envoi ok"; txt.textContent = `Bilan au gérant : ${c.siege}, à jour`; txt.title = ""; }
+}
+const champs = { siege: "r-siege", poste: "r-poste", url: "r-url", cle: "r-cle" };
+const lireChamps = () => Object.fromEntries(Object.entries(champs).map(([k, id]) => [k, $(id).value.trim()]));
+$("btn-reglages").onclick = () => {
+  const c = lireConfig();
+  for (const [k, id] of Object.entries(champs)) $(id).value = c[k] || "";
+  $("r-msg").textContent = "";
+  $("reglages").showModal();
+};
+$("r-annuler").onclick = () => $("reglages").close();
+$("r-tester").onclick = async () => {
+  const c = lireChamps();
+  if (!c.url || !c.cle) { $("r-msg").textContent = "Indiquez l'adresse et la clé."; return; }
+  $("r-msg").textContent = "Test…";
+  try { await testerConnexion(c); $("r-msg").textContent = "✓ Connexion réussie"; }
+  catch (e) { $("r-msg").textContent = "✗ " + (e.message || e); }
+};
+$("form-reglages").addEventListener("submit", e => {
+  if (e.submitter?.id !== "r-ok") return;
+  if (!ecrireConfig(lireChamps())) { e.preventDefault(); $("r-msg").textContent = "Impossible d'enregistrer sur cet appareil."; return; }
+  envoyer();
+});
+window.addEventListener("online", envoyer);
+setInterval(envoyer, 2 * 60 * 1000);
+envoyer();
+
 // ---------- Application installable (PWA)
 // Ouverture d'un PDF depuis l'explorateur de fichiers (« Ouvrir avec… », Chrome/Edge sur PC)
 if ("launchQueue" in window) {
