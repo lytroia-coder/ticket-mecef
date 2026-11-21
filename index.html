@@ -767,8 +767,7 @@ async function poster(config, corps) {
 // =====================================================================
 // BILAN JOURNALIER — calcul et mise en page communs
 // =====================================================================
-// Utilisé tel quel par l'application (page « Bilans journaliers ») et par le
-// script Google (mail au gérant) : build.py l'ajoute à google/Code.gs.
+// Utilisé par l'application (page « Bilans journaliers »).
 // Syntaxe compatible Google Apps Script (pas d'import, « export » retiré au build).
 
 /** Calcul pur (testé sous Node). Les avoirs sont comptés à part. */
@@ -1056,7 +1055,7 @@ $("btn-reglages").onclick = () => {
   const c = lireConfig();
   for (const [k, id] of Object.entries(champs)) $(id).value = c[k] || "";
   $("r-msg").textContent = "";
-  selHeure.value = "17:00";
+  selHeure.value = "12:00";
   $("reglages").showModal();
   lireHeure(c);
 };
