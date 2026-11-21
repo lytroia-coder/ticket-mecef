@@ -56,6 +56,27 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 .barre .installer { display: inline-flex; align-items: center; gap: 8px; background: var(--hero-ink); color: var(--hero); border: 0;
   border-radius: 999px; padding: 8px 16px; font-weight: 600; font-size: .9rem; }
 .barre .installer svg { width: 18px; height: 18px; }
+.barre .lien-barre { display: inline-flex; align-items: center; gap: 8px; background: none; border: 1px solid var(--hero-muted); color: var(--hero-ink);
+  border-radius: 999px; padding: 7px 14px; font-weight: 600; font-size: .9rem; }
+.barre .lien-barre svg { width: 18px; height: 18px; }
+@media (max-width: 560px) { .barre small { display: none; } .barre .lien-barre { margin-left: auto; } }
+dialog.large { width: min(1040px, calc(100% - 24px)); max-height: calc(100dvh - 24px); }
+.bilans { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: calc(100dvh - 26px); }
+.bilans-tete { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.bilans-tete h2 { margin: 0 auto 0 0; font-size: 1.2rem; }
+.bilans-tete input { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.bilans-tete button { padding: 8px 14px; }
+.bilans-corps { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 0; }
+@media (max-width: 760px) { .bilans-corps { grid-template-columns: minmax(0, 1fr); overflow: auto; } .jours { max-height: 180px; border-right: 0 !important; border-bottom: 1px solid var(--line); } }
+.jours { list-style: none; margin: 0; padding: 8px; overflow: auto; border-right: 1px solid var(--line); display: grid; align-content: start; gap: 2px; }
+.jours button { width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; display: grid; gap: 0; }
+.jours button[aria-current="true"] { background: var(--accent-soft); }
+.jours button b { font-size: .92rem; }
+.jours button span { font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.jours .vide { color: var(--muted); font-size: .88rem; padding: 10px; }
+.rapport-zone { overflow: auto; padding: 16px 20px 20px; display: grid; gap: 12px; align-content: start; }
+.rapport-zone .note { margin: 0; color: var(--muted); font-size: .85rem; }
+.rapport { background: #fff; color: #14201c; border-radius: 10px; padding: 18px; border: 1px solid var(--line); overflow-x: auto; }
 .maj { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 10;
   width: max-content; max-width: calc(100% - 32px); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   background: var(--ink); color: var(--bg); border-radius: 12px; padding: 10px 12px 10px 16px; box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: .92rem; }
@@ -161,6 +182,7 @@ footer p { margin: 0; max-width: 72ch; }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v19l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>
       Ticket MECeF
       <small>Bénin · e‑MECeF</small>
+      <button class="lien-barre" id="btn-bilans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Bilans journaliers</button>
       <button class="installer" id="btn-installer" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Installer l'application</button>
     </div>
     <h1>Votre facture e‑MECeF en ticket 80&nbsp;mm</h1>
@@ -255,6 +277,25 @@ footer p { margin: 0; max-width: 72ch; }
       <button class="primary" id="r-ok" value="ok">Enregistrer</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="bilans" class="large" aria-labelledby="t-bilans">
+  <div class="bilans">
+    <div class="bilans-tete">
+      <h2 id="t-bilans">Bilans journaliers</h2>
+      <label class="sr"><span hidden>Jour</span><input type="date" id="b-date" aria-label="Jour du bilan"></label>
+      <button id="b-csv">Exporter CSV</button>
+      <button id="b-imprimer">Imprimer</button>
+      <button id="b-fermer" aria-label="Fermer">Fermer</button>
+    </div>
+    <div class="bilans-corps">
+      <ul class="jours" id="b-jours" aria-label="Jours enregistrés"></ul>
+      <div class="rapport-zone">
+        <p class="note" id="b-note"></p>
+        <div class="rapport" id="b-rapport"></div>
+      </div>
+    </div>
+  </div>
 </dialog>
 
 <div class="maj" id="maj" role="status" hidden>Une nouvelle version est disponible. <button id="btn-maj">Mettre à jour</button></div>
@@ -655,6 +696,10 @@ async function enregistrer(fiche) {
 async function enAttente() {
   return req((await magasin("readonly")).index("envoye").getAll(0));
 }
+/** Tickets dont la date MECeF est comprise entre debut et fin (AAAA-MM-JJ, inclus). */
+async function ticketsEntre(debut, fin) {
+  return req((await magasin("readonly")).index("date").getAll(IDBKeyRange.bound(debut, fin)));
+}
 async function ticketsDuJour(date) {
   return req((await magasin("readonly")).index("date").getAll(date));
 }
@@ -696,6 +741,149 @@ async function poster(config, corps) {
   try { json = await rep.json(); } catch { throw new Error(`réponse inattendue du script (HTTP ${rep.status})`); }
   if (!json.ok) throw new Error(json.erreur || "refusé par le script");
   return json.recus || [];
+}
+
+// =====================================================================
+// BILAN JOURNALIER — calcul et mise en page communs
+// =====================================================================
+// Utilisé tel quel par l'application (page « Bilans journaliers ») et par le
+// script Google (mail au gérant) : build.py l'ajoute à google/Code.gs.
+// Syntaxe compatible Google Apps Script (pas d'import, « export » retiré au build).
+
+/** Calcul pur (testé sous Node). Les avoirs sont comptés à part. */
+function calculerBilan(tickets, articles, date) {
+  var estAvoir = function (t) { return t.type === "FA" || t.type === "EA"; };
+  var ventes = tickets.filter(function (t) { return !estAvoir(t); });
+  var avoirs = tickets.filter(estAvoir);
+  var somme = function (l, k) { return l.reduce(function (s, x) { return s + (Number(x[k]) || 0); }, 0); };
+
+  var sieges = {};
+  tickets.forEach(function (t) {
+    var nom = t.siege || "(siège non réglé)";
+    var s = sieges[nom] || (sieges[nom] = { siege: nom, tickets: 0, montant: 0, camions: {}, avoirs: 0, montantAvoirs: 0 });
+    if (estAvoir(t)) { s.avoirs++; s.montantAvoirs += Number(t.totalNombre) || 0; return; }
+    s.tickets++;
+    s.montant += Number(t.totalNombre) || 0;
+    var r = t.roues === "" || t.roues === null || t.roues === undefined ? "?" : String(t.roues);
+    s.camions[r] = (s.camions[r] || 0) + 1;
+  });
+  var listeSieges = Object.keys(sieges).sort().map(function (k) {
+    var s = sieges[k];
+    s.camions = Object.keys(s.camions).sort(function (a, b) { return (Number(a) || 999) - (Number(b) || 999); })
+      .map(function (r) { return { roues: r, n: s.camions[r] }; });
+    return s;
+  });
+
+  var camions = {};
+  listeSieges.forEach(function (s) { s.camions.forEach(function (c) { camions[c.roues] = (camions[c.roues] || 0) + c.n; }); });
+
+  var parArticle = {};
+  articles.filter(function (a) { return !estAvoir(a); }).forEach(function (a) {
+    var x = parArticle[a.nom] || (parArticle[a.nom] = { nom: a.nom, qte: 0, montant: 0, lignes: 0 });
+    x.qte += Number(a.qteNombre) || 0;
+    x.montant += Number(a.montantNombre) || 0;
+    x.lignes++;
+  });
+
+  return {
+    date: date,
+    ventes: { tickets: ventes.length, montant: somme(ventes, "totalNombre") },
+    avoirs: { tickets: avoirs.length, montant: somme(avoirs, "totalNombre") },
+    net: somme(ventes, "totalNombre") - somme(avoirs, "totalNombre"),
+    camions: Object.keys(camions).sort(function (a, b) { return (Number(a) || 999) - (Number(b) || 999); })
+      .map(function (r) { return { roues: r, n: camions[r] }; }),
+    sieges: listeSieges,
+    articles: Object.keys(parArticle).map(function (k) { return parArticle[k]; })
+      .sort(function (a, b) { return b.montant - a.montant; }),
+    liste: tickets.slice().sort(function (a, b) {
+      return String(a.siege).localeCompare(String(b.siege)) || String(a.heure).localeCompare(String(b.heure));
+    }),
+  };
+}
+
+function sujetBilan(b, entreprise) {
+  return (entreprise ? entreprise + " · " : "") + "Bilan du " + dateFr_(b.date) + " : " +
+    b.ventes.tickets + " ticket" + (b.ventes.tickets > 1 ? "s" : "") + ", " + fcfa_(b.ventes.montant) + " FCFA";
+}
+
+function htmlBilan(b, entreprise, options) {
+  options = options || {};
+  var e = echapper_;
+  var css = {
+    t: "border-collapse:collapse;width:100%;max-width:640px;font-size:14px;margin:0 0 20px",
+    th: "text-align:left;padding:6px 8px;border-bottom:2px solid #0b6b55;color:#0b6b55;font-size:12px;text-transform:uppercase",
+    td: "padding:6px 8px;border-bottom:1px solid #e1e6e4",
+    n: "padding:6px 8px;border-bottom:1px solid #e1e6e4;text-align:right;white-space:nowrap",
+    h2: "font-size:16px;margin:24px 0 8px;color:#14201c",
+  };
+  var tableau = function (entetes, lignes, droite) {
+    return '<table style="' + css.t + '"><tr>' + entetes.map(function (h, i) {
+      return '<th style="' + css.th + (droite && droite[i] ? ";text-align:right" : "") + '">' + e(h) + "</th>";
+    }).join("") + "</tr>" + lignes.map(function (l) {
+      return "<tr>" + l.map(function (c, i) { return '<td style="' + (droite && droite[i] ? css.n : css.td) + '">' + c + "</td>"; }).join("") + "</tr>";
+    }).join("") + "</table>";
+  };
+  var roues = function (r) { return r === "?" ? "roues non précisées" : r + " roues"; };
+  var camionsTxt = function (l) { return l.map(function (c) { return c.n + " × " + e(roues(c.roues)); }).join("<br>") || "—"; };
+
+  var h = '<div style="font-family:Segoe UI,Arial,sans-serif;color:#14201c;line-height:1.45">';
+  h += '<h1 style="font-size:20px;margin:0 0 4px">Bilan du ' + e(dateFr_(b.date)) + "</h1>";
+  h += '<p style="margin:0 0 16px;color:#5a6964">' + (entreprise ? e(entreprise) + " · " : "") + e(options.sousTitre || "tickets enregistrés par les postes") + "</p>";
+
+  if (!b.liste.length) {
+    h += '<p style="padding:12px 14px;background:#fff1d6;border-radius:8px">Aucun ticket enregistré pour cette journée. ' +
+      "Si des ventes ont eu lieu, vérifiez que les postes ont accès à internet.</p></div>";
+    return h;
+  }
+
+  h += tableau(["", ""], [
+    ["Tickets de vente", "<b>" + b.ventes.tickets + "</b>"],
+    ["Montant des ventes", "<b>" + fcfa_(b.ventes.montant) + " FCFA</b>"],
+    ["Camions", camionsTxt(b.camions)],
+    ["Avoirs", b.avoirs.tickets + " · " + fcfa_(b.avoirs.montant) + " FCFA"],
+    ["Net (ventes − avoirs)", "<b>" + fcfa_(b.net) + " FCFA</b>"],
+  ], [false, true]);
+
+  h += '<h2 style="' + css.h2 + '">Par siège</h2>';
+  h += tableau(["Siège", "Tickets", "Camions", "Montant", "Avoirs"], b.sieges.map(function (s) {
+    return [e(s.siege), String(s.tickets), camionsTxt(s.camions), fcfa_(s.montant),
+      s.avoirs ? s.avoirs + " · " + fcfa_(s.montantAvoirs) : "—"];
+  }), [false, true, false, true, true]);
+
+  if (b.articles.length) {
+    h += '<h2 style="' + css.h2 + '">Par article (ventes)</h2>';
+    h += tableau(["Article", "Qté", "Montant"], b.articles.map(function (a) {
+      return [e(a.nom), fcfa_(a.qte), fcfa_(a.montant)];
+    }), [false, true, true]);
+  }
+
+  h += '<h2 style="' + css.h2 + '">Liste des tickets</h2>';
+  h += tableau(["Heure", "Siège", "N° facture", "Client", "Véhicule", "Roues", "Total"], b.liste.map(function (t) {
+    var avoir = t.type === "FA" || t.type === "EA";
+    return [e(t.heure), e(t.siege), e(t.numero) + (avoir ? ' <span style="color:#a3261b">(avoir)</span>' : ""),
+      e(t.client), e(t.immatriculation), t.roues === "" || t.roues == null ? "—" : e(String(t.roues)),
+      (avoir ? "−" : "") + e(t.total)];
+  }), [false, false, false, false, false, true, true]);
+
+  h += '<p style="color:#5a6964;font-size:12px">Montants recopiés des factures normalisées. ' + echapper_(options.pied !== undefined ? options.pied :
+    "Les tickets d'un poste resté sans internet arriveront au bilan dès sa reconnexion (visibles dans la feuille Google).") + "</p></div>";
+  return h;
+}
+
+/** 3450000 → « 3.450.000 » (séparateur des factures e-MECeF) */
+function fcfa_(n) {
+  var s = String(Math.round(Math.abs(n)));
+  return (n < 0 ? "-" : "") + s.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function dateFr_(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  return m ? m[3] + "/" + m[2] + "/" + m[1] : iso;
+}
+
+function echapper_(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // =====================================================================
@@ -743,6 +931,7 @@ function imprimer() {
   if (!courant) return;
   const fr = $("print-frame");
   fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { statut("Impression bloquée par le navigateur : utilisez « Télécharger le PDF » puis imprimez-le.", "warn"); } };
+  fr.removeAttribute("srcdoc"); // sinon srcdoc (impression d'un bilan) l'emporte sur src
   fr.src = courant.url;
 }
 
@@ -836,6 +1025,81 @@ $("form-reglages").addEventListener("submit", e => {
 window.addEventListener("online", envoyer);
 setInterval(envoyer, 2 * 60 * 1000);
 envoyer();
+
+// ---------- Bilans journaliers (tickets enregistrés sur ce poste, sans internet)
+const isoLocal = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const JOURS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
+let bilanCourant = null;
+
+function bilanDe(tickets, date) {
+  const articles = tickets.flatMap(t => (t.articles || []).map(a => ({
+    nom: a.nom, type: t.type, qteNombre: nombre(a.qte), montantNombre: nombre(a.montant) })));
+  return calculerBilan(tickets, articles, date);
+}
+
+async function afficherBilan(date) {
+  $("b-date").value = date;
+  const tickets = await ticketsEntre(date, date);
+  bilanCourant = { date, tickets, bilan: bilanDe(tickets, date) };
+  const c = lireConfig();
+  $("b-rapport").innerHTML = htmlBilan(bilanCourant.bilan, tickets[0]?.entreprise || "", {
+    sousTitre: `tickets convertis sur ce poste${c.siege ? " (" + c.siege + ")" : ""}`,
+    pied: "Seuls les tickets convertis sur cet appareil figurent ici. Le bilan de tous les sièges est envoyé par mail au gérant.",
+  });
+  for (const b of $("b-jours").querySelectorAll("button")) b.setAttribute("aria-current", String(b.dataset.date === date));
+  $("b-csv").disabled = !tickets.length;
+}
+
+async function ouvrirBilans() {
+  const fin = new Date(), debut = new Date(); debut.setDate(debut.getDate() - 90);
+  const tous = await ticketsEntre(isoLocal(debut), isoLocal(fin)).catch(() => []);
+  const parJour = new Map();
+  for (const t of tous) {
+    const j = parJour.get(t.date) || { ventes: 0, montant: 0, avoirs: 0 };
+    if (t.type === "FA" || t.type === "EA") j.avoirs++; else { j.ventes++; j.montant += t.totalNombre || 0; }
+    parJour.set(t.date, j);
+  }
+  const jours = [...parJour.keys()].sort().reverse();
+  $("b-jours").replaceChildren(...(jours.length ? jours.map(d => {
+    const j = parJour.get(d), li = document.createElement("li"), b = document.createElement("button");
+    b.dataset.date = d;
+    const titre = document.createElement("b"); titre.textContent = `${JOURS[new Date(d + "T12:00").getDay()]} ${dateFr_(d)}`;
+    const det = document.createElement("span");
+    det.textContent = `${j.ventes} ticket${j.ventes > 1 ? "s" : ""} · ${fcfa_(j.montant)} FCFA${j.avoirs ? ` · ${j.avoirs} avoir${j.avoirs > 1 ? "s" : ""}` : ""}`;
+    b.append(titre, det); b.onclick = () => afficherBilan(d);
+    li.append(b); return li;
+  }) : [Object.assign(document.createElement("li"), { className: "vide", textContent: "Aucun ticket enregistré sur ce poste pour l'instant." })]));
+  $("b-note").textContent = "Les 90 derniers jours enregistrés sur cet appareil. Choisissez un jour dans la liste ou dans le calendrier.";
+  $("bilans").showModal();
+  await afficherBilan(jours.includes(isoLocal(fin)) || !jours.length ? isoLocal(fin) : jours[0]);
+}
+
+function exporterCsv() {
+  if (!bilanCourant?.tickets.length) return;
+  const col = ["Date", "Heure", "Siège", "Poste", "Type", "N° facture", "Client", "IFU client", "Véhicule", "Roues", "Total", "Paiements", "Code MECeF/DGI", "Compteurs"];
+  const cle = ["date", "heure", "siege", "poste", "type", "numero", "client", "clientIfu", "immatriculation", "roues", "total", "paiements", "codeMecef", "compteurs"];
+  const cellule = v => { const s = v === null || v === undefined ? "" : String(v); return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const lignes = [col, ...[...bilanCourant.tickets].sort((a, b) => a.heure.localeCompare(b.heure)).map(t => cle.map(k => t[k]))];
+  const csv = "\ufeff" + lignes.map(l => l.map(cellule).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `bilan-${bilanCourant.date}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function imprimerBilan() {
+  const fr = $("print-frame");
+  fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch {} };
+  fr.removeAttribute("src");
+  fr.srcdoc = `<!doctype html><meta charset="utf-8"><title>Bilan ${dateFr_(bilanCourant?.date || "")}</title><style>body{margin:16px}@page{margin:12mm}</style>${$("b-rapport").innerHTML}`;
+}
+
+$("btn-bilans").onclick = ouvrirBilans;
+$("b-fermer").onclick = () => $("bilans").close();
+$("b-date").onchange = () => { if ($("b-date").value) afficherBilan($("b-date").value); };
+$("b-csv").onclick = exporterCsv;
+$("b-imprimer").onclick = imprimerBilan;
 
 // ---------- Application installable (PWA)
 // Ouverture d'un PDF depuis l'explorateur de fichiers (« Ouvrir avec… », Chrome/Edge sur PC)
