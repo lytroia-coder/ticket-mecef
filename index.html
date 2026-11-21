@@ -97,6 +97,12 @@ dialog input { font: inherit; padding: 9px 11px; border: 1px solid var(--line); 
 dialog input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 dialog .pied { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; }
 dialog .pied output { margin-right: auto; font-size: .88rem; }
+dialog fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+dialog legend { font-size: .9rem; font-weight: 600; padding: 0 4px; }
+dialog fieldset .ligne { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+dialog select { font: inherit; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-variant-numeric: tabular-nums; }
+dialog fieldset button { padding: 9px 16px; }
+dialog fieldset output { font-size: .88rem; }
 .hors-ligne { display: inline-flex; gap: 6px; align-items: center; }
 .hero h1 { font-size: clamp(1.9rem, 4.6vw, 3rem); line-height: 1.12; letter-spacing: -0.025em; margin: 40px 0 14px; max-width: 18ch; text-wrap: balance; }
 .hero p.lead { font-size: clamp(1.02rem, 1.8vw, 1.18rem); color: var(--hero-muted); margin: 0; max-width: 54ch; }
@@ -270,6 +276,15 @@ footer p { margin: 0; max-width: 72ch; }
     <label>Nom du poste <span>Facultatif. Ex. : Caisse 1</span><input id="r-poste" autocomplete="off"></label>
     <label>Adresse du script Google <span>Fournie à l'installation (commence par https://script.google.com/)</span><input id="r-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"></label>
     <label>Clé des postes <span>Onglet « Paramètres » de la feuille Google</span><input id="r-cle" autocomplete="off" spellcheck="false"></label>
+    <fieldset class="heure-bilan">
+      <legend>Heure du bilan au gérant</legend>
+      <p>Commune à tous les sièges. Google envoie l'e‑mail dans le quart d'heure autour de l'heure choisie.</p>
+      <div class="ligne">
+        <select id="r-heure" aria-label="Heure d'envoi du bilan"></select>
+        <button type="button" id="r-heure-ok">Changer l'heure</button>
+      </div>
+      <output id="r-heure-msg" role="status"></output>
+    </fieldset>
     <div class="pied">
       <output id="r-msg" role="status"></output>
       <button type="button" id="r-tester">Tester</button>
@@ -712,7 +727,7 @@ function synchroniser(config = lireConfig()) {
       const liste = await enAttente();
       if (!liste.length || !envoiConfigure(config)) return { attente: liste.length };
       if (navigator.onLine === false) return { attente: liste.length, erreur: "hors ligne" };
-      const recus = await poster(config, { action: "tickets", tickets: liste.map(({ envoye, ...t }) => t) });
+      const { recus = [] } = await poster(config, { action: "tickets", tickets: liste.map(({ envoye, ...t }) => t) });
       const s = await magasin("readwrite");
       for (const t of liste) if (recus.includes(t.numero)) await req(s.put({ ...t, envoye: 1 }));
       return { attente: liste.length - recus.length };
@@ -725,9 +740,15 @@ function synchroniser(config = lireConfig()) {
   return enCours;
 }
 
-/** Vérifie l'adresse et la clé du script Google. */
+/** Vérifie l'adresse et la clé du script Google. Renvoie { heure: "HH:MM", actif } du bilan. */
 async function testerConnexion(config) {
-  await poster(config, { action: "ping" });
+  const { heure = "", actif = false } = await poster(config, { action: "ping" });
+  return { heure, actif };
+}
+
+/** Change l'heure d'envoi du bilan au gérant (commune à tous les postes). */
+async function changerHeure(config, heure) {
+  return (await poster(config, { action: "heure", heure })).heure;
 }
 
 async function poster(config, corps) {
@@ -740,7 +761,7 @@ async function poster(config, corps) {
   let json;
   try { json = await rep.json(); } catch { throw new Error(`réponse inattendue du script (HTTP ${rep.status})`); }
   if (!json.ok) throw new Error(json.erreur || "refusé par le script");
-  return json.recus || [];
+  return json;
 }
 
 // =====================================================================
@@ -1003,18 +1024,48 @@ async function envoyer() {
 }
 const champs = { siege: "r-siege", poste: "r-poste", url: "r-url", cle: "r-cle" };
 const lireChamps = () => Object.fromEntries(Object.entries(champs).map(([k, id]) => [k, $(id).value.trim()]));
+// Heure du bilan : réglée dans la feuille Google, lue et changée depuis ce poste
+const selHeure = $("r-heure");
+for (let h = 0; h < 24; h++) for (const m of ["00", "30"]) {
+  const v = `${String(h).padStart(2, "0")}:${m}`;
+  selHeure.add(new Option(v.replace(":", " h "), v));
+}
+function montrerHeure({ heure, actif }) {
+  if (!heure) return;
+  if (![...selHeure.options].some(o => o.value === heure)) selHeure.add(new Option(heure.replace(":", " h "), heure));
+  selHeure.value = heure;
+  $("r-heure-msg").textContent = actif ? `Bilan envoyé chaque jour vers ${heure.replace(":", " h ")}.` : "Envoi quotidien pas encore activé.";
+}
+async function lireHeure(c) {
+  if (!c.url || !c.cle || navigator.onLine === false) { $("r-heure-msg").textContent = "Heure lue dans la feuille Google (connexion nécessaire)."; return; }
+  $("r-heure-msg").textContent = "Lecture de l'heure…";
+  try { montrerHeure(await testerConnexion(c)); }
+  catch { $("r-heure-msg").textContent = "Heure non lue (vérifiez l'adresse et la clé)."; }
+}
+$("r-heure-ok").onclick = async () => {
+  const c = lireChamps();
+  if (!c.url || !c.cle) { $("r-heure-msg").textContent = "Indiquez d'abord l'adresse et la clé."; return; }
+  $("r-heure-msg").textContent = "Enregistrement…";
+  $("r-heure-ok").disabled = true;
+  try { montrerHeure({ heure: await changerHeure(c, selHeure.value), actif: true }); $("r-heure-msg").textContent = "✓ " + $("r-heure-msg").textContent; }
+  catch (e) { $("r-heure-msg").textContent = "✗ " + (e.message || e); }
+  finally { $("r-heure-ok").disabled = false; }
+};
+
 $("btn-reglages").onclick = () => {
   const c = lireConfig();
   for (const [k, id] of Object.entries(champs)) $(id).value = c[k] || "";
   $("r-msg").textContent = "";
+  selHeure.value = "17:00";
   $("reglages").showModal();
+  lireHeure(c);
 };
 $("r-annuler").onclick = () => $("reglages").close();
 $("r-tester").onclick = async () => {
   const c = lireChamps();
   if (!c.url || !c.cle) { $("r-msg").textContent = "Indiquez l'adresse et la clé."; return; }
   $("r-msg").textContent = "Test…";
-  try { await testerConnexion(c); $("r-msg").textContent = "✓ Connexion réussie"; }
+  try { montrerHeure(await testerConnexion(c)); $("r-msg").textContent = "✓ Connexion réussie"; }
   catch (e) { $("r-msg").textContent = "✗ " + (e.message || e); }
 };
 $("form-reglages").addEventListener("submit", e => {

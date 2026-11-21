@@ -1,6 +1,6 @@
 // Service worker : garde l'application sur l'appareil pour qu'elle marche sans internet.
-// 2c052ec9c250 change à chaque build : l'ancienne copie est alors remplacée.
-const CACHE = "ticket-mecef-2c052ec9c250";
+// 1233689fcc56 change à chaque build : l'ancienne copie est alors remplacée.
+const CACHE = "ticket-mecef-1233689fcc56";
 const FICHIERS = ["./", "manifest.webmanifest", "icones/icone-192.png", "icones/icone-512.png", "icones/maskable-512.png"];
 
 self.addEventListener("install", e => {
