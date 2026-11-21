@@ -277,11 +277,13 @@ footer p { margin: 0; max-width: 72ch; }
     <label>Adresse du script Google <span>Fournie à l'installation (commence par https://script.google.com/)</span><input id="r-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"></label>
     <label>Clé des postes <span>Onglet « Paramètres » de la feuille Google</span><input id="r-cle" autocomplete="off" spellcheck="false"></label>
     <fieldset class="heure-bilan">
-      <legend>Heure du bilan au gérant</legend>
-      <p>Commune à tous les sièges. Google envoie l'e‑mail dans le quart d'heure autour de l'heure choisie.</p>
+      <legend>Bilan au gérant</legend>
+      <p>Commun à tous les sièges. Chaque jour, le gérant reçoit le bilan de la veille, dans le quart d'heure autour de l'heure choisie.</p>
+      <label>E‑mail du gérant <span>Plusieurs adresses : séparer par des virgules</span><input id="r-mails" type="text" inputmode="email" autocomplete="email" spellcheck="false" placeholder="gerant@entreprise.bj"></label>
       <div class="ligne">
-        <select id="r-heure" aria-label="Heure d'envoi du bilan"></select>
-        <button type="button" id="r-heure-ok">Changer l'heure</button>
+        <label for="r-heure" style="display:inline;font-weight:400">Heure d'envoi</label>
+        <select id="r-heure"></select>
+        <button type="button" id="r-heure-ok">Enregistrer le bilan</button>
       </div>
       <output id="r-heure-msg" role="status"></output>
     </fieldset>
@@ -740,15 +742,16 @@ function synchroniser(config = lireConfig()) {
   return enCours;
 }
 
-/** Vérifie l'adresse et la clé du script Google. Renvoie { heure: "HH:MM", actif } du bilan. */
+/** Vérifie l'adresse et la clé du script Google. Renvoie { heure: "HH:MM", mails, actif } du bilan. */
 async function testerConnexion(config) {
-  const { heure = "", actif = false } = await poster(config, { action: "ping" });
-  return { heure, actif };
+  const { heure = "", mails = "", actif = false } = await poster(config, { action: "ping" });
+  return { heure, mails, actif };
 }
 
-/** Change l'heure d'envoi du bilan au gérant (commune à tous les postes). */
-async function changerHeure(config, heure) {
-  return (await poster(config, { action: "heure", heure })).heure;
+/** Change le mail du gérant et l'heure d'envoi du bilan (communs à tous les postes). */
+async function changerBilan(config, { heure, mails }) {
+  const r = await poster(config, { action: "bilan", heure, mails });
+  return { heure: r.heure, mails: r.mails || mails, actif: true };
 }
 
 async function poster(config, corps) {
@@ -1023,30 +1026,34 @@ async function envoyer() {
 }
 const champs = { siege: "r-siege", poste: "r-poste", url: "r-url", cle: "r-cle" };
 const lireChamps = () => Object.fromEntries(Object.entries(champs).map(([k, id]) => [k, $(id).value.trim()]));
-// Heure du bilan : réglée dans la feuille Google, lue et changée depuis ce poste
+// Bilan au gérant (mail + heure) : réglé dans la feuille Google, lu et changé depuis ce poste
 const selHeure = $("r-heure");
 for (let h = 0; h < 24; h++) for (const m of ["00", "30"]) {
   const v = `${String(h).padStart(2, "0")}:${m}`;
   selHeure.add(new Option(v.replace(":", " h "), v));
 }
-function montrerHeure({ heure, actif }) {
+function montrerHeure({ heure, mails, actif }) {
+  if (mails !== undefined) $("r-mails").value = mails;
   if (!heure) return;
   if (![...selHeure.options].some(o => o.value === heure)) selHeure.add(new Option(heure.replace(":", " h "), heure));
   selHeure.value = heure;
-  $("r-heure-msg").textContent = actif ? `Bilan envoyé chaque jour vers ${heure.replace(":", " h ")}.` : "Envoi quotidien pas encore activé.";
+  $("r-heure-msg").textContent = !actif ? "Envoi quotidien pas encore activé."
+    : mails ? `Bilan envoyé chaque jour vers ${heure.replace(":", " h ")} à ${mails}.` : `Bilan programmé vers ${heure.replace(":", " h ")}, mais aucun e‑mail du gérant.`;
 }
 async function lireHeure(c) {
-  if (!c.url || !c.cle || navigator.onLine === false) { $("r-heure-msg").textContent = "Heure lue dans la feuille Google (connexion nécessaire)."; return; }
-  $("r-heure-msg").textContent = "Lecture de l'heure…";
+  if (!c.url || !c.cle || navigator.onLine === false) { $("r-heure-msg").textContent = "Réglage lu dans la feuille Google (connexion nécessaire)."; return; }
+  $("r-heure-msg").textContent = "Lecture du réglage…";
   try { montrerHeure(await testerConnexion(c)); }
-  catch { $("r-heure-msg").textContent = "Heure non lue (vérifiez l'adresse et la clé)."; }
+  catch { $("r-heure-msg").textContent = "Réglage non lu (vérifiez l'adresse, la clé et le siège)."; }
 }
 $("r-heure-ok").onclick = async () => {
   const c = lireChamps();
-  if (!c.url || !c.cle) { $("r-heure-msg").textContent = "Indiquez d'abord l'adresse et la clé."; return; }
+  if (!c.url || !c.cle || !c.siege) { $("r-heure-msg").textContent = "Indiquez d'abord le siège, l'adresse et la clé."; return; }
+  const mails = $("r-mails").value.trim();
+  if (!mails) { $("r-heure-msg").textContent = "Indiquez l'e‑mail du gérant."; $("r-mails").focus(); return; }
   $("r-heure-msg").textContent = "Enregistrement…";
   $("r-heure-ok").disabled = true;
-  try { montrerHeure({ heure: await changerHeure(c, selHeure.value), actif: true }); $("r-heure-msg").textContent = "✓ " + $("r-heure-msg").textContent; }
+  try { montrerHeure(await changerBilan(c, { heure: selHeure.value, mails })); $("r-heure-msg").textContent = "✓ " + $("r-heure-msg").textContent; }
   catch (e) { $("r-heure-msg").textContent = "✗ " + (e.message || e); }
   finally { $("r-heure-ok").disabled = false; }
 };
@@ -1056,6 +1063,7 @@ $("btn-reglages").onclick = () => {
   for (const [k, id] of Object.entries(champs)) $(id).value = c[k] || "";
   $("r-msg").textContent = "";
   selHeure.value = "12:00";
+  $("r-mails").value = "";
   $("reglages").showModal();
   lireHeure(c);
 };
